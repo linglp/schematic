@@ -48,6 +48,7 @@ class SynapseStorage(BaseStorage):
         self,
         token: str = None,  # optional parameter retrieved from browser cookie
         access_token: str = None,
+        input_token: str = None
     ) -> None:
         """Initializes a SynapseStorage object.
         Args:
@@ -65,6 +66,7 @@ class SynapseStorage(BaseStorage):
         """
 
         self.syn = self.login(token, access_token)
+        self.syn_api = self.api_login(input_token) # create a method for API log in
 
         try:
             self.storageFileview = CONFIG["synapse"]["master_fileview"]
@@ -101,6 +103,7 @@ class SynapseStorage(BaseStorage):
         elif access_token:
             syn = synapseclient.Synapse()
             syn.default_headers["Authorization"] = f"Bearer {access_token}"
+
         else:
             # login using synapse credentials provided by user in .synapseConfig (default) file
             syn = synapseclient.Synapse(configPath=CONFIG.SYNAPSE_CONFIG_PATH)
@@ -108,6 +111,21 @@ class SynapseStorage(BaseStorage):
 
         return syn
 
+    @staticmethod
+    def api_login(input_token=None):
+        if not input_token:
+            print("no token is provided")
+        if input_token:
+
+            print(input_token)
+            syn_api = synapseclient.Synapse()
+
+            try:
+                syn_api.default_headers["Authorization"] = f"Bearer {input_token}"
+            except synapseclient.core.exceptions.SynapseHTTPError:
+                raise ValueError("No access to resources. Please make sure that your token is correct")
+            return syn_api
+    
     def getPaginatedRestResults(self, currentUserId: str) -> Dict[str, str]:
         """Gets the paginated results of the REST call to Synapse to check what projects the current user has access to.
 
@@ -498,7 +516,7 @@ class SynapseStorage(BaseStorage):
                 # no entity exists for this row
                 # so create one
                 rowEntity = Folder(str(uuid.uuid4()), parent=datasetId)
-                rowEntity = self.syn.store(rowEntity)
+                rowEntity = self.syn_api.store(rowEntity) # use input token
                 entityId = rowEntity["id"]
                 row["entityId"] = entityId
                 manifest.loc[idx, "entityId"] = entityId
