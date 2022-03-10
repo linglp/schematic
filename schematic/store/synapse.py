@@ -65,8 +65,8 @@ class SynapseStorage(BaseStorage):
             syn_store = SynapseStorage()
         """
 
-        self.syn = self.login(token, access_token)
-        self.syn_api = self.api_login(input_token) # create a method for API log in
+        self.syn = self.login(token, access_token, input_token)
+        #self.syn_api = self.api_login(input_token) # create a method for API log in
 
         try:
             self.storageFileview = CONFIG["synapse"]["master_fileview"]
@@ -87,9 +87,9 @@ class SynapseStorage(BaseStorage):
             raise MissingConfigValueError(("synapse", "master_fileview"))
 
     @staticmethod
-    def login(token=None, access_token=None):
+    def login(token=None, access_token=None, input_token=None):
         # If no token is provided, try retrieving access token from environment
-        if not token and not access_token:
+        if not token and not access_token and not input_token:
             access_token = os.getenv("SYNAPSE_ACCESS_TOKEN")
 
         # login using a token
@@ -100,9 +100,18 @@ class SynapseStorage(BaseStorage):
                 syn.login(sessionToken=token, silent=True)
             except synapseclient.core.exceptions.SynapseHTTPError:
                 raise ValueError("Please make sure you are logged into synapse.org.")
+
         elif access_token:
             syn = synapseclient.Synapse()
             syn.default_headers["Authorization"] = f"Bearer {access_token}"
+        
+        # login using the input token (from swagger UI)
+        elif input_token: 
+            try: 
+                syn = synapseclient.Synapse()
+                syn.default_headers["Authorization"] = f"Bearer {input_token}"
+            except synapseclient.core.exceptions.SynapseHTTPError:
+                raise ValueError("No access to resources. Please make sure that your token is correct")
 
         else:
             # login using synapse credentials provided by user in .synapseConfig (default) file
@@ -110,21 +119,6 @@ class SynapseStorage(BaseStorage):
             syn.login(silent=True)
 
         return syn
-
-    @staticmethod
-    def api_login(input_token=None):
-        if not input_token:
-            print("no token is provided")
-        if input_token:
-
-            print(input_token)
-            syn_api = synapseclient.Synapse()
-
-            try:
-                syn_api.default_headers["Authorization"] = f"Bearer {input_token}"
-            except synapseclient.core.exceptions.SynapseHTTPError:
-                raise ValueError("No access to resources. Please make sure that your token is correct")
-            return syn_api
     
     def getPaginatedRestResults(self, currentUserId: str) -> Dict[str, str]:
         """Gets the paginated results of the REST call to Synapse to check what projects the current user has access to.
@@ -516,7 +510,7 @@ class SynapseStorage(BaseStorage):
                 # no entity exists for this row
                 # so create one
                 rowEntity = Folder(str(uuid.uuid4()), parent=datasetId)
-                rowEntity = self.syn_api.store(rowEntity) # use input token
+                rowEntity = self.syn.store(rowEntity) # use input token
                 entityId = rowEntity["id"]
                 row["entityId"] = entityId
                 manifest.loc[idx, "entityId"] = entityId
